@@ -112,7 +112,6 @@ class TetrisState:
         self.game_ticks += 1
         over = False
         piece_locked = False
-        df_score = 0
         collided = True
         dt = time.monotonic_ns()-self.time
         try:
@@ -216,6 +215,8 @@ class TetrisState:
             over = True
         if over:
             print(self.score, self.lines, self.pieces_placed)
+
+
         return over, piece_locked, df_score
 
     def load(self, board_state: dict):

@@ -166,8 +166,7 @@ def collect_samples_multiprocess_queue(model_filename, outer=0, target_size=1000
     q = multiprocessing.Queue()
     for i in range(cpu_count):
         p = multiprocessing.Process(target=get_data_from_playing_cnn2d,
-                                    args=(
-                                        model_filename, int(target_size / cpu_count), 1000, i, q))
+                                    args=(model_filename, int(target_size / cpu_count), 1000, i, q))
         jobs.append(p)
         p.start()
 

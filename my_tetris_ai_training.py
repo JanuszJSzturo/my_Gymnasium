@@ -113,7 +113,7 @@ class Memory:
     # Add observations, actions, rewards to memory
     def add_to_memory(self, new_observation, new_action, new_reward):
         main_board = new_observation["main_board"]
-        current_hold_next = to_categorical(np.concatenate((new_observation["current_piece"], new_observation["reserved_board"], new_observation["next_board"]),axis=None), num_classes=8).flatten()
+        current_hold_next = to_categorical(np.concatenate((new_observation["current_piece"], new_observation["reserved_board"], new_observation["next_board"]), axis=None), num_classes=8).flatten()
         observation = list((main_board, current_hold_next))
         self.observations1.append(main_board)
         self.observations2.append(current_hold_next)
