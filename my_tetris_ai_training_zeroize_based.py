@@ -5,6 +5,8 @@ import numpy as np
 from gymnasium.envs.my_tetris import my_tetris
 import time
 import multiprocessing
+import pickle
+
 
 CPU_MAX = 99
 FOLDER_NAME = './tetris_extra/'
@@ -12,6 +14,10 @@ OUT_START = 0
 OUTER_MAX = 20
 
 epsilon = 0.06
+gamma = 0.95
+
+penalty = -500
+reward_coef = [1.0, 0.5, 0.4, 0.3]
 
 
 rng = np.random.default_rng()
@@ -26,7 +32,7 @@ rotations = 4
 
 def create_tetris_model_v0():
     shape_main_grid = (1, 20, 10, 1)
-    shape_current_hold_next = (1, 64)
+    shape_current_hold_next = (1, 56)
     main_grid_input = tf.keras.Input(shape=shape_main_grid[1:], name="main_grid_input")
     a = tf.keras.layers.Conv2D(64, 6, activation="relu", input_shape=shape_main_grid[1:])(main_grid_input)
     a1 = tf.keras.layers.MaxPool2D(pool_size=(15, 5), strides=(1, 1))(a)
@@ -52,7 +58,6 @@ def create_tetris_model_v0():
         # outputs=critic_output
         outputs=critic_output
     )
-    model.summary()
     # model = tf.keras.models.Sequential([
     #     # First Dense layer
     #     tf.keras.layers.Dense(units=32, activation='relu'),
@@ -159,6 +164,7 @@ def train(model, outer_start=0, outer_max=100):
         append_record(text_)
         print('   ' + text_)
 
+
 def collect_samples_multiprocess_queue(model_filename, outer=0, target_size=10000):
     timeout = 800
     cpu_count = min(multiprocessing.cpu_count(), CPU_MAX)
@@ -213,8 +219,8 @@ def get_data_from_playing_cnn2d(model_filename, target_size=8000, max_steps_per_
         env.reset()
         episode_data = list()
         for step in range(max_steps_per_episode):
-
-            possible_states, add_scores, dones, is_include_hold, is_new_hold, _ = env.get_all_possible_states_conv2d()
+            s = env.get_state_dqn_conv2d(env.save_state())
+            possible_states, add_scores, dones, is_include_hold, is_new_hold, all_moves = env.get_all_possible_states_conv2d()
             rewards = get_reward(add_scores, dones)
 
             pool_size = 7
@@ -252,11 +258,15 @@ def get_data_from_playing_cnn2d(model_filename, target_size=8000, max_steps_per_
             if add_scores[best] != int(add_scores[best]):
                 t_spins += 1
 
-            env.step(chosen=chosen)
+            moves = all_moves[chosen]
+            for move in moves:
+                over, piece_locked, _ = env.update(move.value)
+                if over or piece_locked:
+                    break
 
-            if env.is_done() or step == max_steps_per_episode - 1:
+            if over or step == max_steps_per_episode - 1:
                 data += episode_data
-                total_score += env.current_state.score
+                total_score += env.score
                 break
 
         if len(data) > target_size:
@@ -270,6 +280,7 @@ def get_data_from_playing_cnn2d(model_filename, target_size=8000, max_steps_per_
         return
 
     return data, avg_score
+
 
 def get_reward(add_scores, dones):
     reward = list()
@@ -295,6 +306,48 @@ def get_reward(add_scores, dones):
         reward.append(add_score)
     return np.array(reward).reshape([-1, 1])
 
+
+def save_buffer_to_file(filename, buffer):
+    from pathlib import Path
+    Path(FOLDER_NAME + 'dataset').mkdir(parents=True, exist_ok=True)
+    with open(filename, 'wb') as f:
+        pickle.dump(buffer, f)
+
+
+def load_buffer_from_file(filename):
+    with open(filename, 'rb') as f:
+        return pickle.load(f)
+
+
+def process_buffer_best(buffer):
+    s1 = list()
+    s2 = list()
+    s1_ = list()
+    s2_ = list()
+    add_scores = list()
+    dones_ = list()
+    for row in buffer:
+        s1.append(row[0][0])
+        s2.append(row[0][1])
+        s1_.append(row[1][0])
+        s2_.append(row[1][1])
+        add_scores.append(row[2])
+        dones_ += [row[3]]
+
+    s1 = np.concatenate(s1)
+    s2 = np.concatenate(s2)
+    s1_ = np.concatenate(s1_).reshape(s1.shape)
+    s2_ = np.concatenate(s2_).reshape(s2.shape)
+    r_ = get_reward(add_scores, dones_)
+    r_ = np.concatenate(r_)
+    return s1, s2, s1_, s2_, r_, dones_
+
+
+def append_record(text, filename=None):
+    if filename is None:
+        filename = FOLDER_NAME + 'record.txt'
+    with open(filename, 'a') as f:
+        f.write(text)
 
 if __name__ == "__main__":
     if OUT_START == 0:

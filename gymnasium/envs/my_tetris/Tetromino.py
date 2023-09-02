@@ -1,7 +1,7 @@
 from enum import Enum
 import random
 import numpy as np
-import copy
+
 
 class BlockID(Enum):
     I = 1
@@ -245,7 +245,7 @@ class DotBlock(Tetromino):
     color = (87, 87, 87)
     name = 'Dot'
     rotations = 0
-    max_rotations = 0
+    max_rotations = 1
     _x = 3
     _y = -1
 
