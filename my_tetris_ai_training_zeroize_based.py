@@ -8,7 +8,7 @@ import multiprocessing
 import pickle
 
 MODE = "ai_training"
-CPU_MAX = 1
+CPU_MAX = 2
 FOLDER_NAME = './tetris_extra_4/'
 OUT_START = 0
 OUTER_MAX = 20
@@ -100,7 +100,7 @@ def train(model, outer_start=0, outer_max=100):
     epoch_training = 5  # model fitting times
     batch_training = 512
 
-    buffer_new_size = 100
+    buffer_new_size = 1000
     buffer_outer_max = 1
     history = None
 

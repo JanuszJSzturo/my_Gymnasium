@@ -134,7 +134,9 @@ class TetrisState:
         self.level = 1
 
         self.actions_done = np.zeros(100)
+        self.successful_actions = np.zeros(100)
         self.n_actions = 0
+        self.n_successful_actions = 0
         self.last_piece_num_actions = 0
 
         for n in range(NUM_NEXT_TETR):
@@ -142,12 +144,15 @@ class TetrisState:
 
         _ = self._spawn_tetromino()
 
+        self.was_t_spin = False
+
     def reset(self):
         self.__init__()
 
     def update(self, action):
         self.game_ticks += 1
         over = False
+
         piece_locked = False
         lines_cleared = 0
 
@@ -164,6 +169,7 @@ class TetrisState:
 
         if self.current_tetr.status == 'locked':
             over = self._spawn_tetromino()
+            self.was_t_spin = False
 
         if action == Action.LEFT:
             collided = self._move(self.current_tetr, LEFT)
@@ -239,6 +245,11 @@ class TetrisState:
         if action is not None:
             self.actions_done[self.n_actions] = int(action.value)
             self.n_actions += 1
+        if action is not None:
+            if (action != Action.DROP or drop_score != 0) and (action != Action.DOWN or down_score != 0):
+                self.successful_actions[self.n_successful_actions] = int(action.value)
+                self.n_successful_actions += 1
+
 
         if self.current_tetr.status == 'locked':
             # If current tetromino is locked we check line, spawn a new tetromino and check if it is game over
@@ -251,6 +262,7 @@ class TetrisState:
             lines_cleared = self._check_line()
             score = 0
             if self._t_spin():
+                self.was_t_spin = True
                 match lines_cleared:
                     case 0:
                         score = 400 / 800
@@ -312,8 +324,10 @@ class TetrisState:
 
     def _spawn_tetromino(self):
         self.actions_done = np.zeros(100)
+        self.successful_actions = np.zeros(100)
         self.last_piece_num_actions = self.n_actions
         self.n_actions = 0
+        self.n_successful_actions = 0
         new_current = self.next_tetr.pop(0).name
         if not self.randomizer_7_bag:
             self.randomizer_7_bag = list(BlockID)
@@ -505,7 +519,8 @@ class TetrisState:
         """
         if self.current_tetr.name != BlockID.T:
             return False
-        if self.actions_done[self.n_actions-1] != Action.ROT_RIGHT.value and self.actions_done[self.n_actions-1] != Action.ROT_LEFT.value:
+        last_action = self.successful_actions[self.n_successful_actions-1]
+        if last_action != Action.ROT_RIGHT.value and last_action != Action.ROT_LEFT.value:
             return False
         temp_board = np.ones((BOARD_HEIGHT + 2, BOARD_WIDTH + 2), dtype=int)
         temp_board[1:BOARD_HEIGHT+1, 1:BOARD_WIDTH+1] = self.board
@@ -669,6 +684,28 @@ class TetrisState:
                 ghost_state.load_state(initial_state)
             test_tetr.rotate(-1)
 
+        add_moves = [Action.ROT_LEFT, Action.ROT_RIGHT]
+        ghost_state.load_state(initial_state)
+        basic_movements = copy.deepcopy(all_movements)
+        for movements in basic_movements:
+            for add_move in add_moves:
+                new_movements = copy.deepcopy(movements)
+                new_movements.pop()
+                new_movements.append(Action.SOFT)
+                new_movements.append(add_move)
+                new_movements.append(Action.DROP)
+                for moves in new_movements:
+                    over, piece_locked, lines_cleared = ghost_state.update(moves.value)
+                    if over or piece_locked == "locked":
+                        break
+
+                board_energy = TetrisState.get_board_energy(ghost_state.get_board())
+                all_movements.append(new_movements)
+                all_board_energies.append(board_energy)
+                x, y, rot_state = ghost_state.played_tetr[-1].get_state()
+                all_positions.append((x, rot_state))
+                ghost_state.load_state(initial_state)
+
         future_states = {
             "movements": all_movements,
             "board_energies": all_board_energies,
@@ -713,7 +750,7 @@ class TetrisState:
                 for move in movements:
                     over, piece_locked, add_score = ghost_state.update(move.value)
                     if over or piece_locked:
-                        continue
+                        break
                 all_states.append(ghost_state.save_state())
                 all_movements.append(movements)
                 all_add_scores.append(add_score)
@@ -723,13 +760,26 @@ class TetrisState:
 
             test_tetr.rotate(-1)
 
-        for movements in all_movements:
-            ghost_state.load_state(initial_state)
-            new_movements = copy.deepcopy(movements)
-            new_movements.pop()
-
-
-
+        # add_moves = [Action.ROT_LEFT, Action.ROT_RIGHT]
+        # ghost_state.load_state(initial_state)
+        # basic_movements = copy.deepcopy(all_movements)
+        # for movements in basic_movements:
+        #     for add_move in add_moves:
+        #         new_movements = copy.deepcopy(movements)
+        #         new_movements.pop()
+        #         new_movements.append(Action.SOFT)
+        #         new_movements.append(add_move)
+        #         new_movements.append(Action.DROP)
+        #         for moves in new_movements:
+        #             over, piece_locked, lines_cleared = ghost_state.update(moves.value)
+        #             if over or piece_locked == "locked":
+        #                 break
+        #         all_states.append(ghost_state.save_state())
+        #         all_movements.append(movements)
+        #         all_add_scores.append(add_score)
+        #         all_dones.append(over)
+        #
+        #         ghost_state.load_state(initial_state)
 
         is_include_hold = False
         is_new_hold = False
