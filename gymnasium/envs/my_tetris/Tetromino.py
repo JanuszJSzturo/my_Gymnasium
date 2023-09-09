@@ -22,6 +22,12 @@ class Tetromino:
         self._rotation_state = 0
         self.struct = self.struct
         self.status = 'playing'
+        self.L1_started = False
+        self.L2_started = False
+        self.L3_started = False
+        self.L1_time = np.inf
+        self.L2_time = np.inf
+        self.L3_time = np.inf
 
     @staticmethod
     def make(name: BlockID = None):

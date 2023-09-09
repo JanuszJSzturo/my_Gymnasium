@@ -4,6 +4,7 @@ import numpy as np
 import time
 import pygame
 import random
+import copy
 
 BOARD_WIDTH = 10
 BOARD_HEIGHT = 20
@@ -23,6 +24,9 @@ NO_GRAVITY = np.inf
 DEFAULT_GRAVITY = 1000*10**6
 
 LOCK_DELAY_TIME = 500*10**6
+L1_DELAY_TIME = 500*10**6
+L2_DELAY_TIME = 5000*10**6
+L3_DELAY_TIME = 20000*10**6
 
 # Look-up tables for wall kicks for pieces J, L, T, S, Z
 # NOTE: the sign convention is the same as stated in https://tetris.fandom.com/wiki/SRS:
@@ -47,6 +51,7 @@ class Action(Enum):
     ROT_RIGHT = 4
     DROP = 5
     RESERVE = 6
+    SOFT = 7
 
 
 # TODO: Comment the code
@@ -94,15 +99,23 @@ class TetrisState:
         self.next_tetr = []
         self.can_reserve = True
         self.time = time.monotonic_ns()
+
+        self.lock_delay_started = False
+        self.L1_started = False
+        self.L2_started = False
+        self.L3_started = False
+        self.L1_time = time.monotonic_ns()
+        self.L2_time = time.monotonic_ns()
+        self.L3_time = time.monotonic_ns()
+
         self.starting_time = time.monotonic_ns()
         self.time_step = DEFAULT_GRAVITY
-        self.lock_delay_started = False
+
         self.lock_time = 0
         self.game_ticks = 0
 
         self.randomizer_7_bag = list(BlockID)
         random.shuffle(self.randomizer_7_bag)
-        self.current_tetr = Tetromino.make(self.randomizer_7_bag.pop())
 
         self.lines = 0
         self.score = 0
@@ -126,6 +139,8 @@ class TetrisState:
 
         for n in range(NUM_NEXT_TETR):
             self.next_tetr.append(Tetromino.make(self.randomizer_7_bag.pop()))
+
+        _ = self._spawn_tetromino()
 
     def reset(self):
         self.__init__()
@@ -152,16 +167,29 @@ class TetrisState:
 
         if action == Action.LEFT:
             collided = self._move(self.current_tetr, LEFT)
+            if not collided:
+                self.current_tetr.L1_time = time.monotonic_ns()
+
         elif action == Action.RIGHT:
             collided = self._move(self.current_tetr, RIGHT)
+            if not collided:
+                self.current_tetr.L1_time = time.monotonic_ns()
+
         elif action == Action.DOWN:
             collided = self._move(self.current_tetr, DOWN)
             if not collided:
                 down_score += DISTANCE_SCORE
+
         elif action == Action.ROT_LEFT:
             collided = self._rotate(self.current_tetr, ROT_LEFT)
+            if not collided:
+                self.current_tetr.L2_time = time.monotonic_ns()
+                self.current_tetr.L1_time = time.monotonic_ns()
         elif action == Action.ROT_RIGHT:
             collided = self._rotate(self.current_tetr, ROT_RIGHT)
+            if not collided:
+                self.current_tetr.L2_time = time.monotonic_ns()
+                self.current_tetr.L1_time = time.monotonic_ns()
         elif action == Action.DROP:
             drop_score = self._drop(self.current_tetr)
             piece_locked = True
@@ -169,6 +197,8 @@ class TetrisState:
             succeded = self._reserve()
             if succeded:
                 self.piece_score = 0
+        elif action == Action.SOFT:
+            score = self._soft_drop(self.current_tetr)
 
 
         # TODO: how should be the priority in gravity over actions?
@@ -178,23 +208,33 @@ class TetrisState:
 
         self._update_board()
 
-        if not collided and self.lock_delay_started:
-            self.lock_delay_started = False
-            self.time = time.monotonic_ns()
-        # After the movement is resolved, check if piece is at bottom, i.e. it has a piece below or the ground
-        if not self.lock_delay_started and self.current_tetr.status == 'playing':
-            bottom_reached_locked = self._move(self.current_tetr, DOWN)
-            if bottom_reached_locked:
-                self.lock_delay_started = True
-                self.lock_time = time.monotonic_ns()
-            else:
-                self._move(self.current_tetr, np.array([0, -1]))
-        else:
-            dt_lock = time.monotonic_ns() - self.lock_time
-            if dt_lock > LOCK_DELAY_TIME:
+        # Check if piece has reached bottom
+        bottom_reached = self._move(self.current_tetr, DOWN)
+        if bottom_reached:
+            dt_L3 = time.monotonic_ns() - self.current_tetr.L3_time
+            dt_L2 = time.monotonic_ns() - self.current_tetr.L2_time
+            dt_L1 = time.monotonic_ns() - self.current_tetr.L1_time
+            if dt_L3 > L3_DELAY_TIME:
                 self.current_tetr.status = 'locked'
-                piece_locked = True
-                self.lock_delay_started = False
+
+            if self.current_tetr.L2_started:
+                if dt_L2 > L2_DELAY_TIME:
+                    self.current_tetr.status = 'locked'
+            else:
+                self.current_tetr.L2_started = True
+                self.current_tetr.L2_time = time.monotonic_ns()
+
+            if self.current_tetr.L1_started:
+                if dt_L1 > L1_DELAY_TIME:
+                    self.current_tetr.status = 'locked'
+            else:
+                self.current_tetr.L1_started = True
+                self.current_tetr.L1_time = time.monotonic_ns()
+        else:
+            # Undo the down movement because the piece does not reached bottom and moved one point down
+            self._move(self.current_tetr, np.array([0, -1]))
+            self.current_tetr.L2_started = False
+            self.current_tetr.L1_started = False
 
         if action is not None:
             self.actions_done[self.n_actions] = int(action.value)
@@ -213,30 +253,30 @@ class TetrisState:
             if self._t_spin():
                 match lines_cleared:
                     case 0:
-                        score = 400
+                        score = 400 / 800
                         self.stats["t_spin"] += 1
                     case 1:
-                        score = 800
+                        score = 800 / 800
                         self.stats["t_single"] += 1
                     case 2:
-                        score = 1200
+                        score = 1200 / 800
                         self.stats["t_double"] += 1
                     case 3:
-                        score = 1600
+                        score = 1600 / 800
                         self.stats["t_triple"] += 1
             else:
                 match lines_cleared:
                     case 1:
-                        score = 100
+                        score = 100 / 800
                         self.stats["single"] += 1
                     case 2:
-                        score = 300
+                        score = 300 / 800
                         self.stats["double"] += 1
                     case 3:
-                        score = 400
+                        score = 400 / 800
                         self.stats["triple"] += 1
                     case 4:
-                        score = 800
+                        score = 800 / 800
                         self.stats["tetris"] += 1
 
             if lines_cleared > 0:
@@ -254,9 +294,10 @@ class TetrisState:
             print("Reached 150 lines cleared")
             over = True
         if over:
-            print(f'Game Over. Score:{int(self.score)} | Lines: {int(self.lines)}')
+            pass
+            # print(f'Game Over. Score:{int(self.score)} | Lines: {int(self.lines)}')
 
-        return over, piece_locked, piece_locked_score
+        return over, self.current_tetr.status, piece_locked_score
 
     def _update_board(self):
         temp_board = np.zeros((21, 10), dtype=int)
@@ -280,6 +321,10 @@ class TetrisState:
 
         self.next_tetr.append(Tetromino.make(self.randomizer_7_bag.pop()))
         self.current_tetr = Tetromino.make(new_current)
+
+        self.current_tetr.L3_started = True
+        self.current_tetr.L3_time = time.monotonic_ns()
+
         terminated = self._collision(self.current_tetr)
 
         return terminated
@@ -390,7 +435,7 @@ class TetrisState:
     def _move(self, tetr, direction):
         '''
         Moves playing tetromino in specified direction and returns False if there were no collision and True if the
-        wanted movement collides and cannot be done
+        wanted movement collides and could not be done
         :param direction: int numpy array of size 2
         :return: bool
         '''
@@ -408,6 +453,14 @@ class TetrisState:
         score = 0
         while not collision:
             score += 2 * DISTANCE_SCORE
+            collision = self._move(tetr, DOWN)
+        return score
+
+    def _soft_drop(self, tetr):
+        collision = self._move(tetr, DOWN)
+        score = 0
+        while not collision:
+            score += DISTANCE_SCORE
             collision = self._move(tetr, DOWN)
         return score
 
@@ -669,6 +722,14 @@ class TetrisState:
                 ghost_state.load_state(initial_state)
 
             test_tetr.rotate(-1)
+
+        for movements in all_movements:
+            ghost_state.load_state(initial_state)
+            new_movements = copy.deepcopy(movements)
+            new_movements.pop()
+
+
+
 
         is_include_hold = False
         is_new_hold = False

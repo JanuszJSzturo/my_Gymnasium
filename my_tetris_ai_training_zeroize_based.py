@@ -7,9 +7,9 @@ import time
 import multiprocessing
 import pickle
 
-
-CPU_MAX = 99
-FOLDER_NAME = './tetris_extra/'
+MODE = "ai_training"
+CPU_MAX = 1
+FOLDER_NAME = './tetris_extra_4/'
 OUT_START = 0
 OUTER_MAX = 20
 
@@ -51,7 +51,7 @@ def create_tetris_model_v0():
     x = tf.keras.layers.concatenate([a1, a2, b1, b2, current_hold_next_input])
     x = tf.keras.layers.Dense(128, activation="relu")(x)
     x = tf.keras.layers.Dense(64, activation="relu")(x)
-    critic_output = tf.keras.layers.Dense(units=n_actions, activation=None)(x)
+    critic_output = tf.keras.layers.Dense(units=1, activation=None)(x)
 
     model = tf.keras.Model(
         inputs=[main_grid_input, current_hold_next_input],
@@ -100,7 +100,7 @@ def train(model, outer_start=0, outer_max=100):
     epoch_training = 5  # model fitting times
     batch_training = 512
 
-    buffer_new_size = 20000
+    buffer_new_size = 100
     buffer_outer_max = 1
     history = None
 
@@ -121,7 +121,7 @@ def train(model, outer_start=0, outer_max=100):
         for i in range(max(1, outer - buffer_outer_max + 1), outer):
             buffer += load_buffer_from_file(filename=FOLDER_NAME + 'dataset/buffer_{}.pkl'.format(i))
 
-        random.shuffle(buffer)
+        # random.shuffle(buffer)
 
         # 2. calculating target
         s1, s2, s1_, s2_, r_, dones_ = process_buffer_best(buffer)
@@ -137,9 +137,7 @@ def train(model, outer_start=0, outer_max=100):
             for i in range(int(s1.shape[0] / batch_training) + 1):
                 start = i * batch_training
                 end = min((i + 1) * batch_training, s1.shape[0] + 1)
-                target.append(
-                    model((s1_[start:end, :, :, :], s2_[start:end, :]), training=False).numpy().reshape(-1) + r_[
-                                                                                                              start:end])
+                target.append(model((s1_[start:end, :, :, :], s2_[start:end, :]), training=False).numpy().reshape(-1) + r_[start:end])
             target = np.concatenate(target)
             # when it's gameover, Q[s'] must not be added
             for i in range(len(dones_)):
@@ -253,10 +251,10 @@ def get_data_from_playing_cnn2d(model_filename, target_size=8000, max_steps_per_
                 chosen = random.randint(0, len(dones) - 1)
 
             episode_data.append(
-                (s, (possible_states[0][best], possible_states[1][best]), add_scores[best], dones[best]))
+                (s, (possible_states[0][chosen], possible_states[1][chosen]), add_scores[chosen], dones[chosen]))
 
-            if add_scores[best] != int(add_scores[best]):
-                t_spins += 1
+            #if add_scores[best] != int(add_scores[best]):
+             #   t_spins += 1
 
             moves = all_moves[chosen]
             for move in moves:
@@ -349,8 +347,46 @@ def append_record(text, filename=None):
     with open(filename, 'a') as f:
         f.write(text)
 
+
+def test(model, max_games=100):
+    max_steps_per_episode = 2000
+    env = my_tetris.TetrisEnv(render_mode="human")
+
+    episode_count = 0
+    total_score = 0
+
+    pause_time = 0.00
+
+    while True and episode_count < max_games:
+        env.reset()
+        over = False
+        for step in range(max_steps_per_episode):
+            possible_states, add_scores, dones, is_include_hold, is_new_hold, all_moves = env.internal_state.get_all_possible_states_conv2d()
+            rewards = get_reward(add_scores, dones)
+            q = rewards + model(possible_states)
+            best = tf.argmax(q).numpy()[0]
+
+            moves = all_moves[best]
+            for move in moves:
+                observation, reward, over, _, info = env.step(move.value)
+                if over:
+                    break
+
+            if over or step == max_steps_per_episode - 1:
+                episode_count += 1
+                total_score += info["score"]
+                print(f'Episode: {episode_count} | Score: {info["score"]}')
+                break
+    print(f'Average score: {total_score//max_games}')
+
+
 if __name__ == "__main__":
-    if OUT_START == 0:
-        load_model()
-    model_load = tf.keras.models.load_model(f'{FOLDER_NAME}whole_model/outer_{OUT_START}')
-    train(model_load, outer_start=OUT_START, outer_max=OUTER_MAX)
+
+    if MODE == "ai_training":
+        if OUT_START == 0:
+            load_model()
+        model_load = tf.keras.models.load_model(f'{FOLDER_NAME}whole_model/outer_{OUT_START}')
+        train(model_load, outer_start=OUT_START, outer_max=OUTER_MAX)
+    elif MODE == 'ai_playing':
+        model_load = tf.keras.models.load_model(FOLDER_NAME + 'whole_model/outer_{}'.format(OUT_START))
+        test(model_load)
