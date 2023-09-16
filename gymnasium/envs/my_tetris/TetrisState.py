@@ -202,10 +202,10 @@ class TetrisState:
         self._update_board()
 
         # Check if piece has reached bottom
-        bottom_reached = self._move(self.current_tetr, DOWN)
+        success = self._move(self.current_tetr, DOWN)
 
         # If so, check lock delays to lock the piece in place
-        if bottom_reached:
+        if not success:
             dt_L3 = time.monotonic_ns() - self.current_tetr.L3_time
             dt_L2 = time.monotonic_ns() - self.current_tetr.L2_time
             dt_L1 = time.monotonic_ns() - self.current_tetr.L1_time
@@ -454,20 +454,20 @@ class TetrisState:
             return True
 
     def _drop(self, tetr):
-        tetr.status = 'locked'
-        collision = self._move(tetr, DOWN)
         score = 0
-        while not collision:
+        success = True
+        while success:
             score += 2 * DISTANCE_SCORE
-            collision = self._move(tetr, DOWN)
+            success = self._move(tetr, DOWN)
+        tetr.lock()
         return score
 
     def _soft_drop(self, tetr):
-        collision = self._move(tetr, DOWN)
+        success = self._move(tetr, DOWN)
         score = 0
-        while not collision:
+        while success:
             score += DISTANCE_SCORE
-            collision = self._move(tetr, DOWN)
+            success = self._move(tetr, DOWN)
         return score
 
     def _rotate(self, tetr, rot_direction):
