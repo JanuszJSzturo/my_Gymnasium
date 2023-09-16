@@ -73,7 +73,7 @@ class TetrisEnv(gym.Env):
     def step(self, action):
         # TODO define "terminated", "reward", "observation" and "info"
         # Process the step
-        terminated, piece_locked, df_score = self.internal_state.update(action)
+        terminated, piece_locked, df_score, _ = self.internal_state.update(action)
 
         # Get the observation and info of new state
         observation = self._get_obs()

@@ -1,3 +1,9 @@
+import os
+
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '4'
+
 import random
 
 import tensorflow as tf
@@ -8,8 +14,8 @@ import multiprocessing
 import pickle
 
 MODE = "ai_training"
-CPU_MAX = 2
-FOLDER_NAME = './tetris_extra_4/'
+CPU_MAX = 99
+FOLDER_NAME = './tetris_extra_7/'
 OUT_START = 0
 OUTER_MAX = 20
 
@@ -32,7 +38,7 @@ rotations = 4
 
 def create_tetris_model_v0():
     shape_main_grid = (1, 20, 10, 1)
-    shape_current_hold_next = (1, 56)
+    shape_current_hold_next = (1, 76)
     main_grid_input = tf.keras.Input(shape=shape_main_grid[1:], name="main_grid_input")
     a = tf.keras.layers.Conv2D(64, 6, activation="relu", input_shape=shape_main_grid[1:])(main_grid_input)
     a1 = tf.keras.layers.MaxPool2D(pool_size=(15, 5), strides=(1, 1))(a)
@@ -100,7 +106,7 @@ def train(model, outer_start=0, outer_max=100):
     epoch_training = 5  # model fitting times
     batch_training = 512
 
-    buffer_new_size = 1000
+    buffer_new_size = 20000
     buffer_outer_max = 1
     history = None
 
@@ -121,7 +127,7 @@ def train(model, outer_start=0, outer_max=100):
         for i in range(max(1, outer - buffer_outer_max + 1), outer):
             buffer += load_buffer_from_file(filename=FOLDER_NAME + 'dataset/buffer_{}.pkl'.format(i))
 
-        # random.shuffle(buffer)
+        random.shuffle(buffer)
 
         # 2. calculating target
         s1, s2, s1_, s2_, r_, dones_ = process_buffer_best(buffer)
@@ -251,15 +257,15 @@ def get_data_from_playing_cnn2d(model_filename, target_size=8000, max_steps_per_
                 chosen = random.randint(0, len(dones) - 1)
 
             episode_data.append(
-                (s, (possible_states[0][chosen], possible_states[1][chosen]), add_scores[chosen], dones[chosen]))
+                (s, (possible_states[0][best], possible_states[1][best]), add_scores[best], dones[best]))
 
             #if add_scores[best] != int(add_scores[best]):
              #   t_spins += 1
 
             moves = all_moves[chosen]
             for move in moves:
-                over, piece_locked, _ = env.update(move.value)
-                if over or piece_locked:
+                over, piece_locked, _ , _= env.update(move.value)
+                if over:
                     break
 
             if over or step == max_steps_per_episode - 1:

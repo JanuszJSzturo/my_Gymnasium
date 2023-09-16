@@ -42,6 +42,9 @@ class MyGUI:
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     self.quit = True
+                elif event.key == pygame.K_q:
+                    possible_states, add_scores, dones, is_include_hold, is_new_hold, all_moves = self.state.get_all_possible_states_conv2d()
+                    print(f'ok')
                 elif event.key == pygame.K_a:
                     self.action = Action.LEFT
                 elif event.key == pygame.K_d:
@@ -63,6 +66,7 @@ class MyGUI:
                 elif event.key == pygame.K_z:
                     self.action = Action.SOFT
 
+
     def update(self):
         x_pos = np.random.choice(range(10))
         rot_state = np.random.choice(range(4))
@@ -71,10 +75,10 @@ class MyGUI:
         movements = self.state.movement_planning(x_pos, rot_state)
         print(movements)
         for move in movements:
-            self.game_over, _, _ = self.state.update(move.value)
+            self.game_over, _, _, _ = self.state.update(move.value)
 
     def update_human(self):
-        self.game_over, _, _ = self.state.update(action=self.action)
+        self.game_over, _, _, _ = self.state.update(action=self.action)
 
 
     def show_future_states(self):
@@ -87,8 +91,8 @@ class MyGUI:
         for i, movements in enumerate(future_states["movements"]):
             print(f'  Position: {i}')
             for move in movements:
-                over, piece_locked, lines_cleared = ghost_state.update(move.value)
-            print(f'    col: {ghost_state.played_tetr[-1].left}, rot: {ghost_state.played_tetr[-1]._rotation_state}')
+                over, piece_locked, lines_cleared, was_t_spin = ghost_state.update(move.value)
+            print(f'    col: {ghost_state.played_tetrs[-1].left}, rot: {ghost_state.played_tetrs[-1]._rotation_state}')
             self.canvas.fill((0, 0, 0))
             self.canvas = ghost_state.render_frame(self.canvas, self.cell_size)
             self.window.blit(self.canvas, self.canvas.get_rect())
@@ -96,7 +100,6 @@ class MyGUI:
             pygame.display.update()
             pygame.time.delay(500)
             ghost_state.load_state(initial_state)
-
 
 
     def render(self):
@@ -111,6 +114,5 @@ class MyGUI:
 if __name__ == '__main__':
     game = MyGUI()
     game.run()
-    game = MyGUI()
     pygame.quit()
 

@@ -25,7 +25,8 @@ GRID_STATE_1 = {
                        (1, 0, 0, 0, 0, 0, 0, 0, 1, 0))),  # 20
     "current": Tetromino.BlockID.T.value,
     "next": list(),
-    "reserved": None
+    "reserved": None,
+    "played_tetrs": None
 }
 
 GRID_STATE_2 = {
@@ -51,7 +52,8 @@ GRID_STATE_2 = {
                        (1, 1, 1, 0, 1, 1, 0, 1, 1, 1))),  # 20
     "current": Tetromino.BlockID.T.value,
     "next": list(),
-    "reserved": None
+    "reserved": None,
+    "played_tetrs": None
 }
 
 GRID_STATE_3 = {
@@ -77,7 +79,8 @@ GRID_STATE_3 = {
                        (1, 0, 1, 1, 1, 1, 1, 1, 1, 1))),  # 20
     "current": Tetromino.BlockID.T.value,
     "next": list(),
-    "reserved": None
+    "reserved": None,
+    "played_tetrs": None
 }
 
 GRID_STATE_4 = {
@@ -103,7 +106,8 @@ GRID_STATE_4 = {
                        (0, 0, 0, 1, 1, 1, 0, 0, 0, 1))),  # 20
     "current": Tetromino.BlockID.T.value,
     "next": list(),
-    "reserved": None
+    "reserved": None,
+    "played_tetrs": None
 }
 
 GRID_STATE_5 = {
@@ -129,7 +133,8 @@ GRID_STATE_5 = {
                        (1, 1, 1, 1, 1, 0, 1, 1, 1, 1))),  # 20
     "current": Tetromino.BlockID.T.value,
     "next": list(),
-    "reserved": None
+    "reserved": None,
+    "played_tetrs": None
 }
 
 GRID_STATE_6 = {
@@ -155,7 +160,8 @@ GRID_STATE_6 = {
                        (1, 1, 1, 1, 0, 1, 1, 1, 1, 1))),  # 20
     "current": Tetromino.BlockID.T.value,
     "next": list(),
-    "reserved": None
+    "reserved": None,
+    "played_tetrs": None
 }
 
 ELEVATOR_1 = {
@@ -184,7 +190,8 @@ ELEVATOR_1 = {
                   Tetromino.BlockID.T.value,
                   Tetromino.BlockID.T.value,
                   Tetromino.BlockID.T.value)),
-    "reserved": None
+    "reserved": None,
+    "played_tetrs": None
 }
 
 ELEVATOR_2 = {
@@ -213,7 +220,8 @@ ELEVATOR_2 = {
                   Tetromino.BlockID.T.value,
                   Tetromino.BlockID.T.value,
                   Tetromino.BlockID.T.value)),
-    "reserved": None
+    "reserved": None,
+    "played_tetrs": None
 }
 
 ELEVATOR_3 = {
@@ -242,5 +250,6 @@ ELEVATOR_3 = {
                   Tetromino.BlockID.T.value,
                   Tetromino.BlockID.T.value,
                   Tetromino.BlockID.T.value)),
-    "reserved": None
+    "reserved": None,
+    "played_tetrs": None
 }
