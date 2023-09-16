@@ -2,6 +2,8 @@ from enum import Enum
 import random
 import numpy as np
 
+LOCK_COLOR_FACTOR = 0.6
+
 
 class BlockID(Enum):
     I = 1
@@ -140,6 +142,12 @@ class Tetromino:
         else:
             self._rotation_state = 0
             print(f'Rotation state {rot} invalid for {self.name}')
+
+    def lock(self):
+        self.status = 'locked'
+        self.color = (int(self.color[0]*LOCK_COLOR_FACTOR),
+                      int(self.color[1]*LOCK_COLOR_FACTOR),
+                      int(self.color[2]*LOCK_COLOR_FACTOR))
 
 
 

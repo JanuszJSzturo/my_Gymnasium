@@ -58,7 +58,7 @@ class MyGUI:
                 elif event.key == pygame.K_k:
                     self.action = Action.ROT_RIGHT
                 elif event.key == pygame.K_r:
-                    self.action = Action.RESERVE
+                    self.action = Action.HOLD
                 elif event.key == pygame.K_SPACE:
                     self.next = True
                 elif event.key == pygame.K_c:

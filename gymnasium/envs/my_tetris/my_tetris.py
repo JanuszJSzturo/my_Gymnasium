@@ -48,7 +48,7 @@ class TetrisEnv(gym.Env):
     def _get_obs(self):
         return {"main_board": self.internal_state.get_board(),
                 "next_board": self.internal_state.get_next_tetrominoes(),
-                "reserved_board": self.internal_state.get_reserved(),
+                "reserved_board": self.internal_state.get_hold(),
                 "current_piece": self.internal_state.get_current_tetromino()}
 
     def _get_info(self):

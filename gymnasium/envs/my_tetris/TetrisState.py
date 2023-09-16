@@ -50,7 +50,7 @@ class Action(Enum):
     ROT_LEFT = 3
     ROT_RIGHT = 4
     DROP = 5
-    RESERVE = 6
+    HOLD = 6
     SOFT = 7
 
 
@@ -80,14 +80,14 @@ class TetrisState:
     Board: numpy array of size (20, 10) of int.
         - 1 -> occupied cell
         - 0 -> free cell
-    Current, reserved -> Tetromino object
+    Current, hold -> Tetromino object
     Played, next -> list of Tetromino objects
     """
     def __init__(self):
         """
         Initialize a tetris game state
         Clean the board
-        Clean reserved tetromino
+        Clean hold tetromino
         Clean played tetrominoes
         Initializes current tetromino with a random tetromino
         Populate future tetrominoes with 6 random tetromino
@@ -96,9 +96,9 @@ class TetrisState:
         self.playing_board = np.zeros((BOARD_HEIGHT + 2, BOARD_WIDTH), dtype=int)
 
         self.played_tetrs = []
-        self.reserved_tetr = None
+        self.hold_tetr = None
         self.next_tetr = []
-        self.can_reserve = True
+        self.can_hold = True
         self.time = time.monotonic_ns()
 
 
@@ -144,10 +144,7 @@ class TetrisState:
 
     def update(self, action):
         self.game_ticks += 1
-        over = False
-
-        piece_locked = False
-        lines_cleared = 0
+        game_over = False
 
         piece_locked_score = 0
         drop_score = 0
@@ -161,40 +158,37 @@ class TetrisState:
             action = None
 
         if self.current_tetr.status == 'locked':
-            over = self._spawn_tetromino()
+            game_over = self._spawn_tetromino()
             self.was_t_spin = False
 
         if action == Action.LEFT:
-            collided = self._move(self.current_tetr, LEFT)
-            if not collided:
+            success = self._move(self.current_tetr, LEFT)
+            if success:
                 self.current_tetr.L1_time = time.monotonic_ns()
-
         elif action == Action.RIGHT:
-            collided = self._move(self.current_tetr, RIGHT)
-            if not collided:
+            success = self._move(self.current_tetr, RIGHT)
+            if success:
                 self.current_tetr.L1_time = time.monotonic_ns()
-
         elif action == Action.DOWN:
-            collided = self._move(self.current_tetr, DOWN)
-            if not collided:
+            success = self._move(self.current_tetr, DOWN)
+            if success:
                 down_score += DISTANCE_SCORE
-
         elif action == Action.ROT_LEFT:
-            collided = self._rotate(self.current_tetr, ROT_LEFT)
-            if not collided:
+            success = self._rotate(self.current_tetr, ROT_LEFT)
+            if success:
                 self.current_tetr.L2_time = time.monotonic_ns()
                 self.current_tetr.L1_time = time.monotonic_ns()
         elif action == Action.ROT_RIGHT:
-            collided = self._rotate(self.current_tetr, ROT_RIGHT)
-            if not collided:
+            success = self._rotate(self.current_tetr, ROT_RIGHT)
+            if success:
                 self.current_tetr.L2_time = time.monotonic_ns()
                 self.current_tetr.L1_time = time.monotonic_ns()
         elif action == Action.DROP:
             drop_score = self._drop(self.current_tetr)
             piece_locked = True
-        elif action == Action.RESERVE:
-            succeded = self._reserve()
-            if succeded:
+        elif action == Action.HOLD:
+            success = self._hold()
+            if success:
                 self.piece_score = 0
         elif action == Action.SOFT:
             score = self._soft_drop(self.current_tetr)
@@ -209,23 +203,25 @@ class TetrisState:
 
         # Check if piece has reached bottom
         bottom_reached = self._move(self.current_tetr, DOWN)
+
+        # If so, check lock delays to lock the piece in place
         if bottom_reached:
             dt_L3 = time.monotonic_ns() - self.current_tetr.L3_time
             dt_L2 = time.monotonic_ns() - self.current_tetr.L2_time
             dt_L1 = time.monotonic_ns() - self.current_tetr.L1_time
             if dt_L3 > L3_DELAY_TIME:
-                self.current_tetr.status = 'locked'
+                self.current_tetr.lock()
 
             if self.current_tetr.L2_started:
                 if dt_L2 > L2_DELAY_TIME:
-                    self.current_tetr.status = 'locked'
+                    self.current_tetr.lock()
             else:
                 self.current_tetr.L2_started = True
                 self.current_tetr.L2_time = time.monotonic_ns()
 
             if self.current_tetr.L1_started:
                 if dt_L1 > L1_DELAY_TIME:
-                    self.current_tetr.status = 'locked'
+                    self.current_tetr.lock()
             else:
                 self.current_tetr.L1_started = True
                 self.current_tetr.L1_time = time.monotonic_ns()
@@ -243,15 +239,12 @@ class TetrisState:
                 self.successful_actions[self.n_successful_actions] = int(action.value)
                 self.n_successful_actions += 1
 
-
+        # Process lock piece state
         if self.current_tetr.status == 'locked':
             # If current tetromino is locked we check line, spawn a new tetromino and check if it is game over
             self.pieces_placed += 1
             self.played_tetrs.append(self.current_tetr)
             self._update_board()
-            color = self.current_tetr.color
-            factor = 0.6
-            self.current_tetr.color = (int(color[0]*factor), int(color[1]*factor), int(color[2]*factor))
             self.was_t_spin = self._t_spin()
             lines_cleared = self._check_line()
             score = 0
@@ -292,20 +285,16 @@ class TetrisState:
             piece_locked_score = (1 + self.combo * 0.5) * (score * self.level)
             self.score += piece_locked_score
 
-            self.can_reserve = True
+            self.can_hold = True
             self._update_board()
 
-        if self.lines >= 300:
-            print("Reached 300 lines cleared")
-            over = True
-
         if self.board[0, :].sum() > 1:
-            over = True
-        if over:
+            game_over = True
+        if game_over:
             pass
             # print(f'Game Over. Score:{int(self.score)} | Lines: {int(self.lines)}')
 
-        return over, self.current_tetr.status, piece_locked_score, self.was_t_spin
+        return game_over, self.current_tetr.status, piece_locked_score, self.was_t_spin
 
     def _update_board(self):
         temp_board = np.zeros((21, 10), dtype=int)
@@ -339,17 +328,22 @@ class TetrisState:
 
         return terminated
 
-    def _reserve(self):
-        if self.reserved_tetr is None:
-            self.reserved_tetr = Tetromino.make(self.current_tetr.name)
+    def _hold(self):
+        """
+        Holds the playing tetromino if allowed and returns:
+         - True if action succeded
+         - False if cannot hold the tetromino
+        """
+        if self.hold_tetr is None:
+            self.hold_tetr = Tetromino.make(self.current_tetr.name)
             self._spawn_tetromino()
-            self.can_reserve = False
+            self.can_hold = False
             return True
-        elif self.can_reserve:
+        elif self.can_hold:
             current_tetr_name = self.current_tetr.name
-            self.current_tetr = Tetromino.make(self.reserved_tetr.name)
-            self.reserved_tetr = Tetromino.make(current_tetr_name)
-            self.can_reserve = False
+            self.current_tetr = Tetromino.make(self.hold_tetr.name)
+            self.hold_tetr = Tetromino.make(current_tetr_name)
+            self.can_hold = False
             return True
         return False
 
@@ -444,18 +438,20 @@ class TetrisState:
 
     def _move(self, tetr, direction):
         '''
-        Moves playing tetromino in specified direction and returns False if there were no collision and True if the
-        wanted movement collides and could not be done
+        Moves playing tetromino in specified direction and returns:
+            - False if the movement could not be performed
+            - True if the movement was successful
         :param direction: int numpy array of size 2
         :return: bool
         '''
         # Resolve movement
         tetr.move(direction)
-        collision = self._collision(tetr)
-        # If collision, undo movement
-        if collision:
+        # Check for collision
+        if self._collision(tetr):
             tetr.move(-direction)
-        return collision
+            return False
+        else:
+            return True
 
     def _drop(self, tetr):
         tetr.status = 'locked'
@@ -476,8 +472,9 @@ class TetrisState:
 
     def _rotate(self, tetr, rot_direction):
         """
-        Rotates current tetromino in specifiied direction and returns False if there were no collision and True if the
-        wanted movement collides and cannot be done
+        Rotates current tetromino in specifiied direction and returns a bool and wall kick performed if any:
+            - False if the rotation could not be performed and None
+            - True if the rotation was successful and wall_kick performed if there was no wall_kick it return None
         :param rot_direction: 1 for rotation to left, -1 for rotation to the right
         :return: bool
         """
@@ -487,7 +484,7 @@ class TetrisState:
         # Basic rotation.
         tetr.rotate(rot_direction)
         if not self._collision(tetr):
-            return False
+            return True, None
 
         # Basic rotation has collision, trying wall kicks from rotated piece
         # Select the wall kick array according to the piece
@@ -500,13 +497,13 @@ class TetrisState:
         for move_x, move_y in wall_kicks[starting_rotation_state][rotation_direction]:
             tetr.move((move_x, -move_y))
             if not self._collision(tetr):
-                return False
+                return True, (move_x, -move_y)
             else:
                 tetr.move((-move_x, move_y))
 
         # All wall kicks have collision, undo basic rotation
         tetr.rotate(-rot_direction)
-        return True
+        return False, None
 
     def _t_spin(self):
         """
@@ -550,7 +547,7 @@ class TetrisState:
             "board": self.get_board(),
             "current": self.get_current_tetromino(),
             "next": self.get_next_tetrominoes(),
-            "reserved": self.get_reserved(),
+            "hold": self.get_hold(),
             "played_tetrs": self.get_played_tetrominoes()
         }
 
@@ -583,10 +580,10 @@ class TetrisState:
     def get_board(self):
         return np.array(self.board, dtype=int)
 
-    def get_reserved(self):
-        if self.reserved_tetr is None:
+    def get_hold(self):
+        if self.hold_tetr is None:
             return 0
-        return self.reserved_tetr.name.value
+        return self.hold_tetr.name.value
 
     def get_next_tetrominoes(self):
         next_tetr = np.zeros_like(self.next_tetr, dtype=int)
@@ -638,7 +635,7 @@ class TetrisState:
     @staticmethod
     def get_hold_next_np_dqn(game_state):
         current = game_state["current"]
-        hold = game_state["reserved"]
+        hold = game_state["hold"]
         next = game_state["next"]
 
         current = one_hot_encoding(current, n_classes=len(BlockID))
@@ -723,8 +720,8 @@ class TetrisState:
             for col in range(columns):
                 movements = ghost_state.movement_planning(col, rot)
                 for move in movements:
-                    over, piece_locked, lines_cleared, was_t_spin = ghost_state.update(move.value)
-                    if over or piece_locked:
+                    game_over, piece_locked, lines_cleared, was_t_spin = ghost_state.update(move.value)
+                    if game_over or piece_locked:
                         continue
                 board_energy = TetrisState.get_board_energy(ghost_state.get_board())
                 all_movements.append(movements)
@@ -745,8 +742,8 @@ class TetrisState:
                     new_movements.append(add_move)
                     new_movements.append(Action.DROP)
                     for moves in new_movements:
-                        over, piece_locked, lines_cleared, was_t_spin = ghost_state.update(moves.value)
-                        if over or piece_locked == "locked":
+                        game_, piece_locked, lines_cleared, was_t_spin = ghost_state.update(moves.value)
+                        if game_over or piece_locked == "locked":
                             break
                     if was_t_spin:
                         board_energy = TetrisState.get_board_energy(ghost_state.get_board())
@@ -798,11 +795,11 @@ class TetrisState:
             for col in range(columns):
                 movements = ghost_state.movement_planning(col, rot)
                 for move in movements:
-                    over, piece_locked, add_score, was_t_spin = ghost_state.update(move.value)
+                    game_over, piece_locked, add_score, was_t_spin = ghost_state.update(move.value)
                 all_states.append(ghost_state.save_state())
                 all_movements.append(movements)
                 all_add_scores.append(add_score)
-                all_dones.append(over)
+                all_dones.append(game_over)
 
                 ghost_state.load_state(initial_state)
 
@@ -820,12 +817,12 @@ class TetrisState:
                     new_movements.append(add_move)
                     new_movements.append(Action.DROP)
                     for moves in new_movements:
-                        over, piece_locked, add_score, was_t_spin = ghost_state.update(moves.value)
+                        game_over, piece_locked, add_score, was_t_spin = ghost_state.update(moves.value)
                     if was_t_spin:
                         all_states.append(ghost_state.save_state())
                         all_movements.append(movements)
                         all_add_scores.append(add_score)
-                        all_dones.append(over)
+                        all_dones.append(game_over)
 
                     ghost_state.load_state(initial_state)
 
@@ -842,8 +839,8 @@ class TetrisState:
         # Playing surfaces
         main_grid = pygame.Surface((cell_size * 10 + 1, cell_size * 20 + 1))
         main_grid.fill((0, 0, 0))
-        reserve_grid = pygame.Surface((cell_size * 2 + 1, cell_size * 1 + 1))
-        reserve_grid.fill((0, 0, 0))
+        hold_grid = pygame.Surface((cell_size * 2 + 1, cell_size * 1 + 1))
+        hold_grid.fill((0, 0, 0))
         next_grid = pygame.Surface((cell_size * 2 + 1, cell_size * 9 + 1))
         next_grid.fill((0, 0, 0))
 
@@ -910,7 +907,7 @@ class TetrisState:
             tetromino: tetromino to draw on surface.
             surface: surface to draw tetromino on.
             cell_size: size in pixels of single square of a tetromino.
-            main_grid: bool to know if drawing tetromino on main grid or reserved/next grid.
+            main_grid: bool to know if drawing tetromino on main grid or hold/next grid.
             pos_offset: offset in position when drawing on next grid.
             """
             off_set = 4
@@ -938,9 +935,9 @@ class TetrisState:
             for tetr in self.played_tetrs:
                 render_tetr(tetr, main_grid, cell_size)
 
-        # Render reserved tetromino
-        if self.reserved_tetr:
-            render_tetr(self.reserved_tetr, reserve_grid, cell_size//2, False)
+        # Render hold tetromino
+        if self.hold_tetr:
+            render_tetr(self.hold_tetr, hold_grid, cell_size // 2, False)
 
         # Render next tetrominoes
         for i, tetr in enumerate(self.next_tetr):
@@ -949,13 +946,13 @@ class TetrisState:
 
         # Finally, add some gridlines
         draw_grid_lines(main_grid, cell_size)
-        draw_grid_lines(reserve_grid, cell_size//2)
+        draw_grid_lines(hold_grid, cell_size//2)
         draw_grid_lines(next_grid, cell_size//2)
 
         # Blit the different surfaces onto canvas
         grids_offset = 6
         canvas.blit(source=main_grid, dest=((4+grids_offset)*cell_size, 2*cell_size))
-        canvas.blit(source=reserve_grid, dest=((1+grids_offset)*cell_size, 2*cell_size))
+        canvas.blit(source=hold_grid, dest=((1+grids_offset)*cell_size, 2*cell_size))
         canvas.blit(source=next_grid, dest=((15+grids_offset)*cell_size, 2*cell_size))
         canvas.blit(source=info_grid, dest=(1*cell_size, 4*cell_size))
 
