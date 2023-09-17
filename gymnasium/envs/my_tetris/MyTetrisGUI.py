@@ -66,7 +66,6 @@ class MyGUI:
                 elif event.key == pygame.K_z:
                     self.action = Action.SOFT
 
-
     def update(self):
         x_pos = np.random.choice(range(10))
         rot_state = np.random.choice(range(4))
@@ -82,7 +81,7 @@ class MyGUI:
 
 
     def show_future_states(self):
-        initial_state = self.state.save_state()
+        initial_state = self.state.save_state(save_played_tetrs=False)
         ghost_state = TetrisState()
         ghost_state.load_state(initial_state)
 
@@ -100,7 +99,6 @@ class MyGUI:
             pygame.display.update()
             pygame.time.delay(500)
             ghost_state.load_state(initial_state)
-
 
     def render(self):
         self.canvas.fill((0, 0, 0))

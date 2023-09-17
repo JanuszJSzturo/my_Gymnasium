@@ -114,7 +114,6 @@ class Tetromino:
         rows, _ = np.where(self.struct == 1)
         return len(np.unique(rows))
 
-
     def rotate(self, rot_direction):
         self.struct = np.rot90(self.struct, k=rot_direction)  # np.rot90 k>0 counter-clockwise, k<0 clockwise
         self._rotation_state = (self._rotation_state - rot_direction) % 4
